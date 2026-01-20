@@ -1,0 +1,28 @@
+# ==============================================================================
+# Hanwha Q Cells Translation Project Dependencies
+# Python 3.12+ compatible
+# ==============================================================================
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# Google Gemini AI API
+google-generativeai>=0.8.0
+
+# Google Sheets API
+gspread>=6.0.0
+google-auth>=2.0.0
+google-auth-oauthlib>=1.0.0
+
+# Microsoft Office document processing
+python-docx>=1.0.0
+python-pptx>=1.0.0
+xlwings>=0.30.0
+pywin32>=306
+
+# HTTP requests (Slack webhook)
+requests>=2.30.0
+
+# Data processing (for glossary)
+pandas>=2.2.0
+openpyxl>=3.1.0

@@ -1,0 +1,64 @@
+# ==============================================================================
+# 한화큐셀 번역 프로젝트 .gitignore
+# ==============================================================================
+
+# Python 가상환경
+venv/
+.venv/
+env/
+.env/
+
+# 환경변수 파일 (API 키 보안)
+.env
+.env.local
+.env.*.local
+
+# 서비스 계정 키 파일 (보안)
+credentials.json
+*.json
+
+# Python 캐시
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE 설정
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 테스트 관련
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# 기타
+*.log
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# 데이터 폴더 (원본/번역 파일, 용어집 등)
+data/
