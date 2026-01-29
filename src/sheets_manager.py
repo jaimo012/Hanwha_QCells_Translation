@@ -448,6 +448,39 @@ class SheetsManager:
             print(f"⚠️ 진행율 계산 실패: {e}")
             return 0.0
     
+    def get_review_progress(self):
+        """
+        1차 검수완료 진행율을 계산합니다.
+        
+        전체 파일 중 "1차 검수완료" 상태인 파일의 비율을 반환합니다.
+        
+        Returns:
+            float: 1차 검수완료 진행율 (0~100)
+        """
+        try:
+            all_values = self.sheet.get_all_values()
+            
+            total_count = 0
+            review_completed_count = 0
+            
+            # 헤더 제외 (1행은 헤더)
+            for row in all_values[1:]:
+                if len(row) > SheetColumns.STATUS - 1:
+                    status = row[SheetColumns.STATUS - 1]
+                    if status:  # 빈 행 제외
+                        total_count += 1
+                        if status == Status.REVIEW_1_COMPLETED:
+                            review_completed_count += 1
+            
+            if total_count == 0:
+                return 0.0
+            
+            return (review_completed_count / total_count) * 100
+            
+        except Exception as e:
+            print(f"⚠️ 검수 진행율 계산 실패: {e}")
+            return 0.0
+    
     def get_task_times(self, row_index):
         """
         작업의 시작/종료 시간을 가져옵니다.

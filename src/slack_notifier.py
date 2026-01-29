@@ -167,3 +167,34 @@ def send_error_notification(error_message):
     
     return send_slack_message(message)
 
+
+def send_review_completion_notification(file_name, file_path, review_progress_percent):
+    """
+    1차 검수 완료 알림을 Slack으로 전송합니다.
+    
+    Args:
+        file_name (str): 파일명 ("-en" 포함)
+        file_path (str): 파일 경로
+        review_progress_percent (float): 1차 검수완료 진행율 (0~100)
+        
+    Returns:
+        bool: 전송 성공 여부
+    """
+    now = datetime.now().strftime("%Y.%m.%d %H:%M")
+    
+    message = f"""🔧 *한화큐셀 프로젝트 1차 검수완료*
+{now}
+
+*1차 검수완료 진행율*: {review_progress_percent:.1f}%
+
+*파일명*
+{file_name}
+
+*경로*
+{file_path}
+
+<https://docs.google.com/spreadsheets/d/1xYby26nGoyXC3tGk1b3BqSNMl3QssNCqDFkCXAnRIs0/edit?gid=0#gid=0|📂 *시트 바로가기*>
+"""
+    
+    return send_slack_message(message)
+

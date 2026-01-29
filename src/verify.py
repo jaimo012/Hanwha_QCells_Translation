@@ -24,7 +24,7 @@ from .config import (
 from .translator import generate_context
 from .handlers import process_docx, process_pptx, process_xlsx
 from .sheets_manager import SheetsManager, Status
-from .slack_notifier import send_completion_notification, send_error_notification
+from .slack_notifier import send_review_completion_notification, send_error_notification
 from .glossary import get_glossary
 from .utils import has_korean
 
@@ -406,18 +406,20 @@ def verify_task(sheets_manager, task):
             sheets_manager.update_status(row_index, Status.REVIEW_1_COMPLETED)
             print(f"\n   🎉 검수 완료!")
             
+<<<<<<< HEAD
             # 9. Slack 알림 전송
+            # 9. Slack 알림 전송 (검수 완료 전용 포맷)
             try:
-                times = sheets_manager.get_task_times(row_index)
-                progress = sheets_manager.get_overall_progress()
+                review_progress = sheets_manager.get_review_progress()
                 file_path = f"{upper_path}/{sub_path}"
                 
-                send_completion_notification(
-                    file_name=f"[검수] {file_name}",
+                # "-en"이 붙은 실제 작업 파일명 사용
+                work_file_name = os.path.basename(work_file_path)
+                
+                send_review_completion_notification(
+                    file_name=work_file_name,
                     file_path=file_path,
-                    start_time=times['start_time'],
-                    end_time=times['end_time'],
-                    progress_percent=progress
+                    review_progress_percent=review_progress
                 )
             except Exception as slack_error:
                 print(f"   ⚠️ Slack 알림 전송 실패: {slack_error}")
