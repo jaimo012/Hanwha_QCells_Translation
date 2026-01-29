@@ -9,11 +9,20 @@ Google Sheets API를 사용하여 작업 상태를 관리합니다.
 """
 
 import os
+import time
 from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
 
 from .config import PROJECT_ROOT, GOOGLE_SHEETS_URL, GOOGLE_SHEETS_NAME
+
+
+# ==============================================================================
+# [Rate Limit 설정]
+# ==============================================================================
+SHEETS_API_RETRY_COUNT = 3      # 재시도 횟수
+SHEETS_API_RETRY_DELAY = 5      # 재시도 대기 시간 (초)
+SHEETS_API_MIN_DELAY = 0.5      # API 호출 간 최소 대기 시간 (초)
 
 
 # ==============================================================================
@@ -46,6 +55,8 @@ class Status:
     IN_PROGRESS = "진행중"
     COMPLETED = "완료"
     ERROR = "오류"
+    VERIFIED_1 = "1차검증완료"
+    REVIEW_1_COMPLETED = "1차 검수완료"  # 1차 번역 검수 완료
 
 
 # ==============================================================================
@@ -134,19 +145,95 @@ class SheetsManager:
         except Exception as e:
             print(f"❌ 작업 조회 실패: {e}")
             return None
+
+    def get_completed_tasks(self):
+        """
+        진행상태가 '완료'인 모든 작업을 반환합니다.
+        
+        Returns:
+            list: 완료된 작업 리스트 (row_index, upper_path, sub_path, file_name, status 등)
+        """
+        try:
+            all_values = self.sheet.get_all_values()
+            completed_tasks = []
+            
+            for idx, row in enumerate(all_values[1:], start=2):
+                if len(row) > SheetColumns.STATUS - 1:
+                    status = row[SheetColumns.STATUS - 1]
+                    if status == Status.COMPLETED:
+                        completed_tasks.append({
+                            'row_index': idx,
+                            'row_num': row[SheetColumns.ROW_NUM - 1] if len(row) >= SheetColumns.ROW_NUM else '',
+                            'upper_path': row[SheetColumns.UPPER_PATH - 1] if len(row) >= SheetColumns.UPPER_PATH else '',
+                            'sub_path': row[SheetColumns.SUB_PATH - 1] if len(row) >= SheetColumns.SUB_PATH else '',
+                            'file_name': row[SheetColumns.FILE_NAME - 1] if len(row) >= SheetColumns.FILE_NAME else '',
+                            'file_type': row[SheetColumns.FILE_TYPE - 1] if len(row) >= SheetColumns.FILE_TYPE else '',
+                            'status': status,
+                        })
+            
+            return completed_tasks
+            
+        except Exception as e:
+            print(f"❌ 완료 작업 조회 실패: {e}")
+            return []
     
+    def _api_call_with_retry(self, func, *args, **kwargs):
+        """
+        Rate Limit 대응을 위한 재시도 래퍼 함수
+        
+        Args:
+            func: 실행할 함수
+            *args, **kwargs: 함수 인자
+            
+        Returns:
+            함수 실행 결과
+            
+        Raises:
+            Exception: 최대 재시도 후에도 실패 시
+        """
+        last_exception = None
+        
+        for attempt in range(SHEETS_API_RETRY_COUNT):
+            try:
+                time.sleep(SHEETS_API_MIN_DELAY)  # 최소 대기
+                return func(*args, **kwargs)
+            except Exception as e:
+                last_exception = e
+                error_str = str(e)
+                
+                # Rate Limit (429) 에러인 경우 대기 후 재시도
+                if '429' in error_str or 'Quota exceeded' in error_str:
+                    wait_time = SHEETS_API_RETRY_DELAY * (attempt + 1)
+                    print(f"   ⏳ API 한도 초과, {wait_time}초 대기 후 재시도 ({attempt + 1}/{SHEETS_API_RETRY_COUNT})...")
+                    time.sleep(wait_time)
+                else:
+                    # 다른 종류의 에러는 바로 raise
+                    raise
+        
+        # 모든 재시도 실패
+        raise last_exception
+
     def update_status(self, row_index, status):
         """
         진행상태(G열)를 업데이트합니다.
         
+        Rate Limit 대응을 위한 재시도 로직이 포함되어 있습니다.
+        
         Args:
             row_index (int): 행 번호 (1-based)
             status (str): 상태값 (대기/진행중/완료/오류)
+            
+        Returns:
+            bool: 성공 여부
         """
         try:
-            self.sheet.update_cell(row_index, SheetColumns.STATUS, status)
+            self._api_call_with_retry(
+                self.sheet.update_cell, row_index, SheetColumns.STATUS, status
+            )
+            return True
         except Exception as e:
             print(f"❌ 상태 업데이트 실패: {e}")
+            return False
     
     def update_file_name(self, row_index, new_file_name):
         """
@@ -159,7 +246,9 @@ class SheetsManager:
             new_file_name (str): 새 파일명 (확장자 소문자)
         """
         try:
-            self.sheet.update_cell(row_index, SheetColumns.FILE_NAME, new_file_name)
+            self._api_call_with_retry(
+                self.sheet.update_cell, row_index, SheetColumns.FILE_NAME, new_file_name
+            )
             print(f"   ✅ 시트 파일명 업데이트 완료")
         except Exception as e:
             print(f"⚠️ 파일명 업데이트 실패: {e}")

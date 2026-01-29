@@ -13,6 +13,9 @@ env/
 .env.local
 .env.*.local
 
+# 설정 파일 (API 키, 웹훅 URL 등 민감 정보 포함)
+src/config.py
+
 # 서비스 계정 키 파일 (보안)
 credentials.json
 *.json

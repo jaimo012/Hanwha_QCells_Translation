@@ -263,6 +263,10 @@ def process_task(sheets_manager, task):
         if ext not in ALL_SUPPORTED_EXTENSIONS:
             raise ValueError(f"지원하지 않는 파일 형식입니다: {ext}")
         
+        # 5. 원본 파일 무결성 검사 (손상된 파일 조기 감지)
+        if not verify_file_integrity(origin_path):
+            raise ValueError(f"원본 파일이 손상되었습니다 (열 수 없음): {origin_path}")
+        
         # 5. 진행상태 '진행중'으로 변경 + 시작시간 기록
         # 이어하기 모드에서는 토큰 초기화 하지 않음
         if is_resume_mode:
@@ -339,12 +343,56 @@ def process_task(sheets_manager, task):
         return False
 
 
+def verify_file_integrity(file_path):
+    """
+    파일의 무결성을 검사합니다.
+    
+    손상된 파일(빈 파일, 열리지 않는 파일)인지 확인합니다.
+    
+    Args:
+        file_path (str): 검사할 파일 경로
+        
+    Returns:
+        bool: 파일이 정상이면 True, 손상되었으면 False
+    """
+    try:
+        # 파일 크기 확인 (0바이트면 손상)
+        if os.path.getsize(file_path) == 0:
+            return False
+        
+        # 확장자별 무결성 검사
+        ext = os.path.splitext(file_path)[1].lower()
+        
+        if ext == '.docx':
+            # python-docx로 열어보기
+            doc = Document(file_path)
+            # 최소한 body가 있는지 확인
+            _ = doc.paragraphs
+            return True
+            
+        elif ext == '.pptx':
+            # python-pptx로 열어보기
+            prs = Presentation(file_path)
+            _ = prs.slides
+            return True
+            
+        elif ext == '.xlsx':
+            # 파일 크기만 확인 (xlwings는 Excel 필요)
+            return os.path.getsize(file_path) > 1000  # 최소 1KB
+            
+        return True  # 다른 형식은 기본적으로 통과
+        
+    except Exception as e:
+        print(f"   ⚠️ 파일 무결성 검사 실패: {e}")
+        return False
+
+
 def prepare_work_files_resume(work_file_path, origin_path, completed_dir, completed_original):
     """
     이어하기 모드에서 작업 파일을 준비합니다.
     
-    기존 "-en" 파일이 있으면 그대로 사용하고,
-    없으면 새로 생성합니다.
+    기존 "-en" 파일이 있으면 무결성 검사 후 사용하고,
+    손상되었거나 없으면 새로 생성합니다.
     
     Args:
         work_file_path (str): 작업 파일 경로 ("-en" 파일)
@@ -360,11 +408,22 @@ def prepare_work_files_resume(work_file_path, origin_path, completed_dir, comple
         # 1. "-en" 파일이 이미 존재하는지 확인
         if os.path.exists(work_file_path):
             print(f"   ✅ 기존 작업 파일 발견: {os.path.basename(work_file_path)}")
-            print(f"   🔄 이어서 번역을 진행합니다...")
-            return work_file_path
+            
+            # 2. 파일 무결성 검사
+            if verify_file_integrity(work_file_path):
+                print(f"   🔄 이어서 번역을 진행합니다...")
+                return work_file_path
+            else:
+                # 손상된 파일 삭제 후 새로 생성
+                print(f"   ⚠️ 기존 파일이 손상되었습니다. 삭제 후 새로 생성합니다...")
+                try:
+                    os.remove(work_file_path)
+                except Exception as del_err:
+                    print(f"   ❌ 손상된 파일 삭제 실패: {del_err}")
+                    return None
         
-        # 2. "-en" 파일이 없으면 새로 생성 (기존 로직 사용)
-        print(f"   ⚠️ 기존 작업 파일이 없습니다. 새로 생성합니다...")
+        # 3. "-en" 파일이 없거나 손상되었으면 새로 생성
+        print(f"   📝 작업 파일을 새로 생성합니다...")
         return prepare_work_files(origin_path, completed_dir, completed_original, work_file_path)
         
     except Exception as e:
@@ -412,6 +471,11 @@ def main():
     success_count = 0
     fail_count = 0
     
+    # 연속 오류 방지를 위한 추적 변수 (파일명 기반)
+    fail_count_by_file = {}  # {file_name: 실패 횟수}
+    MAX_CONSECUTIVE_FAILS = 3  # 같은 파일 연속 실패 허용 횟수
+    skipped_files = set()  # 건너뛴 파일명 목록
+    
     print("\n🚀 작업 시작...")
     print("   (Ctrl+C로 중단할 수 있습니다)")
     
@@ -425,11 +489,37 @@ def main():
                 print("✅ 모든 대기 작업 완료!")
                 break
             
+            current_row = task['row_index']
+            file_name = task['file_name']
+            
+            # 이미 건너뛴 파일이면 "건너뛰기완료"로 변경하고 다음으로
+            if file_name in skipped_files:
+                print(f"\n⏭️ 건너뛰기: {file_name} (반복 실패로 제외됨)")
+                sheets_manager.update_status(current_row, "건너뛰기완료")
+                continue
+            
+            # 해당 파일의 실패 횟수 확인
+            current_fail_count = fail_count_by_file.get(file_name, 0)
+            
+            if current_fail_count >= MAX_CONSECUTIVE_FAILS:
+                print(f"\n⚠️ 파일 '{file_name}'이(가) {MAX_CONSECUTIVE_FAILS}회 실패했습니다.")
+                print(f"   → 이 파일을 건너뛰고 다음 파일로 이동합니다.")
+                skipped_files.add(file_name)
+                sheets_manager.update_status(current_row, "건너뛰기완료")
+                fail_count += 1
+                continue
+            
             # 작업 처리
             if process_task(sheets_manager, task):
                 success_count += 1
+                # 성공 시 실패 카운트 제거
+                if file_name in fail_count_by_file:
+                    del fail_count_by_file[file_name]
             else:
                 fail_count += 1
+                # 실패 시 카운트 증가
+                fail_count_by_file[file_name] = current_fail_count + 1
+                print(f"   ⚠️ 실패 횟수: {fail_count_by_file[file_name]}/{MAX_CONSECUTIVE_FAILS}")
                 
         except KeyboardInterrupt:
             print("\n\n⚠️ 사용자에 의해 중단되었습니다.")
