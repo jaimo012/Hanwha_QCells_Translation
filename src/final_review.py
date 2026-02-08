@@ -13,6 +13,7 @@ Google Sheets '최종검수' 시트의 파일 목록을 순차적으로 처리�
 6. 검수 일시 기록 (K열)
 """
 
+import gc
 import os
 import time
 import traceback
@@ -229,6 +230,9 @@ def try_open_file(file_path):
     - .doc:  구버전 Word 형식은 파일 크기로 기본 체크
     - 기타:  파일 크기로 기본 체크
 
+    ⚠️ 중요: 열었던 파일 객체는 반드시 닫거나 삭제하여
+    파일 핸들 누수와 메모리 누적을 방지합니다.
+
     Args:
         file_path (str): 검사할 파일 경로
 
@@ -248,18 +252,24 @@ def try_open_file(file_path):
         if ext == '.docx':
             doc = Document(file_path)
             _ = doc.paragraphs
+            del doc  # 메모리에서 명시적 해제
             return True
 
         if ext == '.pptx':
             prs = Presentation(file_path)
             _ = prs.slides
+            del prs  # 메모리에서 명시적 해제
             return True
 
         if ext == '.xlsx':
             wb = openpyxl.load_workbook(file_path, read_only=True)
-            _ = wb.sheetnames
-            wb.close()
-            return True
+            try:
+                _ = wb.sheetnames
+                return True
+            finally:
+                # read_only 모드는 파일 핸들을 계속 잡고 있으므로
+                # 성공/실패와 무관하게 반드시 닫아야 함
+                wb.close()
 
         if ext == '.doc':
             # .doc (구버전 Word)는 python-docx로 열 수 없음
@@ -424,6 +434,10 @@ def review_single_row(sheet, row_index, upper_path, sub_path, file_name):
     # ── 시트에 결과 기록 (E~K열, 단일 API 호출) ──
     update_row_result(sheet, row_index, results)
     print(f"      📝 K: 시트 기록 완료 ({results['review_datetime']})")
+
+    # ── 리소스 정리: 이 파일에서 열었던 모든 객체를 메모리에서 해제 ──
+    # python-docx, python-pptx, openpyxl 등이 남긴 객체를 정리
+    gc.collect()
 
     return results
 

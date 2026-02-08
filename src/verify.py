@@ -155,6 +155,7 @@ def scan_korean_in_docx(file_path):
         tuple: (한글 존재 여부, 한글이 포함된 텍스트 개수)
     """
     korean_count = 0
+    doc = None
     
     try:
         doc = Document(file_path)
@@ -187,6 +188,10 @@ def scan_korean_in_docx(file_path):
     except Exception as e:
         print(f"   ⚠️ Word 스캔 오류: {e}")
         return False, 0
+    finally:
+        # 메모리에서 명시적 해제 (파일 객체 정리)
+        if doc is not None:
+            del doc
     
     return korean_count > 0, korean_count
 
@@ -202,6 +207,7 @@ def scan_korean_in_pptx(file_path):
         tuple: (한글 존재 여부, 한글이 포함된 텍스트 개수)
     """
     korean_count = 0
+    prs = None
     
     try:
         prs = Presentation(file_path)
@@ -240,6 +246,10 @@ def scan_korean_in_pptx(file_path):
     except Exception as e:
         print(f"   ⚠️ PowerPoint 스캔 오류: {e}")
         return False, 0
+    finally:
+        # 메모리에서 명시적 해제 (파일 객체 정리)
+        if prs is not None:
+            del prs
     
     return korean_count > 0, korean_count
 
@@ -255,6 +265,7 @@ def scan_korean_in_xlsx(file_path):
         tuple: (한글 존재 여부, 한글이 포함된 셀 개수)
     """
     korean_count = 0
+    wb = None
     
     try:
         wb = openpyxl.load_workbook(file_path, data_only=True)
@@ -266,11 +277,13 @@ def scan_korean_in_xlsx(file_path):
                         if has_korean(cell.value.strip()):
                             korean_count += 1
         
-        wb.close()
-        
     except Exception as e:
         print(f"   ⚠️ Excel 스캔 오류: {e}")
         return False, 0
+    finally:
+        # 성공/실패와 무관하게 반드시 워크북 닫기
+        if wb is not None:
+            wb.close()
     
     return korean_count > 0, korean_count
 
