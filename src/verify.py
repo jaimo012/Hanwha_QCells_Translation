@@ -419,8 +419,6 @@ def verify_task(sheets_manager, task):
             sheets_manager.update_status(row_index, Status.REVIEW_1_COMPLETED)
             print(f"\n   🎉 검수 완료!")
             
-<<<<<<< HEAD
-            # 9. Slack 알림 전송
             # 9. Slack 알림 전송 (검수 완료 전용 포맷)
             try:
                 review_progress = sheets_manager.get_review_progress()
