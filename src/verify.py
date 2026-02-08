@@ -258,6 +258,9 @@ def scan_korean_in_xlsx(file_path):
     """
     Excel 문서에서 한글이 있는지 스캔합니다.
     
+    values_only=True로 값만 가져와서 성능을 최적화합니다.
+    (Cell 객체 생성 없이 순수 값만 순회 → 빈 셀은 None으로 즉시 건너뜀)
+    
     Args:
         file_path (str): 파일 경로
         
@@ -271,10 +274,10 @@ def scan_korean_in_xlsx(file_path):
         wb = openpyxl.load_workbook(file_path, data_only=True)
         
         for sheet in wb.worksheets:
-            for row in sheet.iter_rows():
-                for cell in row:
-                    if cell.value and isinstance(cell.value, str):
-                        if has_korean(cell.value.strip()):
+            for row in sheet.iter_rows(values_only=True):
+                for value in row:
+                    if value and isinstance(value, str):
+                        if has_korean(value.strip()):
                             korean_count += 1
         
     except Exception as e:
